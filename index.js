@@ -12,7 +12,7 @@ app.use(express.json());
 
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ei0qpxt.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -29,7 +29,8 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     //await client.connect();
     const userCollection = client.db("surveyDb").collection("users");
-
+    const surveysCollection = client.db("surveyDb").collection("surveys");
+    const packagesCollection = client.db("surveyDb").collection("packages");
     // jwt related api
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -66,6 +67,30 @@ async function run() {
       next();
     }
 
+    //all user get
+    //verifyToken,verifyAdmin,
+    //** verifyAdmin, 
+    app.get('/users', verifyToken,verifyAdmin, async (req, res) => {
+        // const sorObj = {};
+        // const sortField = req.query.sortField;
+        //  const sortOrder = req.query.sortOrder;
+        //  console.log(sortField, sortOrder);
+        //  if(sortField && sortOrder){
+        //   sorObj[sortField] = sortOrder
+          
+        // } 
+      //const cursor = userCollection.find().sort(sorObj);
+      const role = req.query.role;
+      let queryObj = {};
+      if(role ){
+        queryObj.role  = role ;
+      }
+      const cursor = userCollection.find(queryObj);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+    
+
     //check admin
     app.get('/users/admin/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
@@ -82,6 +107,22 @@ async function run() {
       }
       res.send({ admin });
     })
+    //check surveyor
+    app.get('/users/surveyor/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'forbidden access' })
+      }
+
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      let surveyor = false;
+      if (user) {
+        surveyor = user?.role === 'surveyor';
+      }
+      res.send({ surveyor });
+    })  
 
     //user create
     app.post('/users', async (req, res) => {
@@ -96,6 +137,93 @@ async function run() {
       const result = await userCollection.insertOne(user);
       res.send(result);
     });
+    //verifyToken, verifyAdmin,
+    //** verifyAdmin,
+    app.patch('/users/admin',verifyToken,verifyAdmin,  async (req, res) => {
+      const id = req.query.id;
+      const status = req.query.role;
+      console.log(id, status);
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: status
+        }
+      }
+      const result = await userCollection.updateOne(filter, updatedDoc);
+      console.log(result);
+      res.send(result);
+    })
+
+    //verifyToken, verifyAdmin,
+    app.delete('/users/:id',   async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await userCollection.deleteOne(query);
+      res.send(result);
+    })
+
+    //survey relater api
+    
+    app.get('/survey', async(req, res) => {
+      const result = await surveysCollection.find().toArray();
+      res.send(result)
+  })
+
+  app.get('/survey/:id', async(req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await surveysCollection.find(query).toArray();
+      res.send(result)
+  })
+  
+    app.post('/create-survey',verifyToken, async(req, res) => {
+      const product = req.body; console.log(product);
+      const result = await surveysCollection.insertOne(product);
+       res.send(result);
+  })
+   app.patch('/survey-publish/:id', async(req, res) => {
+      const id = req.params.id;
+      const publish = req.body;
+      
+      console.log(id, publish);
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          isPublish: publish.publish
+        }
+      }
+      const result = await surveysCollection.updateOne(filter, updatedDoc)
+      console.log(result);
+      res.send(result)
+  })
+  //todo:survey page unpublished
+   app.patch('/survey-unpublished/:id', async(req, res) => {
+      const id = req.params.id;
+      const unpublished = req.body;
+      
+      console.log(id, unpublished);
+      // const filter = { _id: new ObjectId(id) };
+      // const updatedDoc = {
+      //   $set: {
+      //     isPublish: publish.publish
+      //   }
+      // }
+      // const result = await surveysCollection.updateOne(filter, updatedDoc)
+      // console.log(result);
+      // res.send(result)
+  })
+  //package related api 
+     app.get('/packages', async(req, res) => {
+      const result = await packagesCollection.find().toArray();
+      res.send(result)
+  })
+     app.get('/packages/:id', async(req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await packagesCollection.find(query).toArray();
+      res.send(result)
+  })
+     
     // Send a ping to confirm a successful connection
     //await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
