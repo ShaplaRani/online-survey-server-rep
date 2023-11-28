@@ -2,6 +2,8 @@ const express = require('express')
 require('dotenv').config()
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -12,7 +14,7 @@ app.use(express.json());
 
 
 
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ei0qpxt.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -138,7 +140,7 @@ async function run() {
       res.send(result);
     });
     //verifyToken, verifyAdmin,
-    //** verifyAdmin,
+    //create surveyor
     app.patch('/users/admin',verifyToken,verifyAdmin,  async (req, res) => {
       const id = req.query.id;
       const status = req.query.role;
@@ -181,7 +183,8 @@ async function run() {
       const result = await surveysCollection.insertOne(product);
        res.send(result);
   })
-   app.patch('/survey-publish/:id', async(req, res) => {
+  //survey page publish
+   app.patch('/survey-publish/:id',verifyToken, async(req, res) => {
       const id = req.params.id;
       const publish = req.body;
       
@@ -197,20 +200,20 @@ async function run() {
       res.send(result)
   })
   //todo:survey page unpublished
-   app.patch('/survey-unpublished/:id', async(req, res) => {
+   app.patch('/survey-unpublished/:id',verifyToken, async(req, res) => {
       const id = req.params.id;
       const unpublished = req.body;
       
       console.log(id, unpublished);
-      // const filter = { _id: new ObjectId(id) };
-      // const updatedDoc = {
-      //   $set: {
-      //     isPublish: publish.publish
-      //   }
-      // }
-      // const result = await surveysCollection.updateOne(filter, updatedDoc)
-      // console.log(result);
-      // res.send(result)
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          feedback: unpublished.feedback
+        }
+      }
+      const result = await surveysCollection.updateOne(filter, updatedDoc)
+      console.log(result);
+      res.send(result)
   })
   //package related api 
      app.get('/packages', async(req, res) => {
@@ -223,7 +226,45 @@ async function run() {
       const result = await packagesCollection.find(query).toArray();
       res.send(result)
   })
-     
+       // payment intent
+       app.post('/create-payment-intent', async (req, res) => {
+        const { price } = req.body;
+        const amount = parseInt(price * 100);
+        console.log(amount, 'amount inside the intent')
+  
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: 'usd',
+          payment_method_types: ['card']
+        });
+  
+        res.send({
+          clientSecret: paymentIntent.client_secret
+        })
+      });
+      //user update 
+      app.patch('/payments',verifyToken, async(req, res) => {
+        console.log('pro user');
+        const email= req.body.email;
+        const proUser = req.body;
+        
+        console.log(email,proUser);
+        const filter = { email: email };
+        const updatedDoc = {
+          $set: {
+            transactionId: proUser.transactionId,
+            price: proUser.price,
+            date: proUser.date,
+            package: proUser.package,
+            role:proUser.role
+          }
+          
+          
+        }
+        const result = await userCollection.updateOne(filter, updatedDoc)
+        console.log(result);
+        res.send(result)
+    })
     // Send a ping to confirm a successful connection
     //await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
