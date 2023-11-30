@@ -202,30 +202,20 @@ async function run() {
       res.send(result)
   })
 
-  //get survey filter by title
-    // app.get('/survey/survey-title', async(req, res) => {
-    //   const title = req.query?.title;
-    //   let  query = {};
-    //   if(title){
-    //      query = {title: title}
-    //   }
-
-      
-    //   const result = await surveysCollection.find(query).toArray();
-    //   res.send(result)
-    // })
-   //get survey filter by category
-  //  app.get('/survey/survey-category', async(req, res) => {
-  //   const category = req.query?.category;
-  //   let  query = {};
-  //   if(category){
-  //      query = {category: category}
-  //   }
-
-    
-  //   const result = await surveysCollection.find(query).toArray();
-  //   res.send(result)
-  //  })
+  //home page
+  app.get('/recently-survey',async(req, res) => {
+    const sortObj ={};
+    const sortField = req.query.sortField;
+    const sortOrder = req.query.sortOrder;
+    if(sortField && sortOrder){
+      sortObj[sortField] = sortOrder
+    }
+  
+    const cursor = surveysCollection.find().sort(sortObj);
+    const result = await cursor.toArray();
+    res.send(result);
+  })
+  
 
   app.get('/survey/:id', async(req, res) => {
       const id = req.params.id;
@@ -239,23 +229,8 @@ async function run() {
       const result = await surveysCollection.insertOne(product);
        res.send(result);
   })
-  //vul
-  //survey page publish
-  //  app.patch('/survey-publish/:id',verifyToken, async(req, res) => {
-  //     const id = req.params.id;
-  //     const publish = req.body;
-      
-  //     console.log(id, publish);
-  //     const filter = { _id: new ObjectId(id) };
-  //     const updatedDoc = {
-  //       $set: {
-  //         isPublish: publish.publish
-  //       }
-  //     }
-  //     const result = await surveysCollection.updateOne(filter, updatedDoc)
-  //     console.log(result);
-  //     res.send(result)
-  // })
+  
+ 
   //todo: admin survey page unpublished
    app.patch('/survey-unpublished/:id',verifyToken, async(req, res) => {
       const id = req.params.id;
@@ -382,6 +357,7 @@ app.post('/survey-vote', async(req, res) => {
 
 
 
+
   //package related api 
      app.get('/packages', async(req, res) => {
       const result = await packagesCollection.find().toArray();
@@ -444,7 +420,7 @@ run().catch(console.dir);
 
 
 app.get('/', (req, res) => {
-  res.send('survey is sitting')
+  res.send('survey is setting')
 })
 app.listen(port, () => {
   console.log(`survey is sitting on port:${port}`);
