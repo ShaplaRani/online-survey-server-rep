@@ -10,6 +10,12 @@ const port = process.env.PORT || 5000;
 
 //middleware
 app.use(cors());
+// app.use(
+//   cors({
+//       origin: ['http://localhost:5173', 'https://enmmedia.web.app'],
+//       credentials: true,
+//   }),
+// )
 app.use(express.json());
 
 
@@ -33,6 +39,8 @@ async function run() {
     const userCollection = client.db("surveyDb").collection("users");
     const surveysCollection = client.db("surveyDb").collection("surveys");
     const packagesCollection = client.db("surveyDb").collection("packages");
+    const commentCollection = client.db("surveyDb").collection("comment");
+    const votedCollection = client.db("surveyDb").collection("voted");
     // jwt related api
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -125,6 +133,22 @@ async function run() {
       }
       res.send({ surveyor });
     })  
+    //check proUser
+    app.get('/users/proUser/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'forbidden access' })
+      }
+
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      let surveyor = false;
+      if (user) {
+        surveyor = user?.role === 'pro-user';
+      }
+      res.send({ surveyor });
+    })  
 
     //user create
     app.post('/users', async (req, res) => {
@@ -167,9 +191,41 @@ async function run() {
     //survey relater api
     
     app.get('/survey', async(req, res) => {
-      const result = await surveysCollection.find().toArray();
+      const email = req.query?.email;
+      let  query = {};
+      if(email){
+         query = {email: email}
+      }
+
+      
+      const result = await surveysCollection.find(query).toArray();
       res.send(result)
   })
+
+  //get survey filter by title
+    // app.get('/survey/survey-title', async(req, res) => {
+    //   const title = req.query?.title;
+    //   let  query = {};
+    //   if(title){
+    //      query = {title: title}
+    //   }
+
+      
+    //   const result = await surveysCollection.find(query).toArray();
+    //   res.send(result)
+    // })
+   //get survey filter by category
+  //  app.get('/survey/survey-category', async(req, res) => {
+  //   const category = req.query?.category;
+  //   let  query = {};
+  //   if(category){
+  //      query = {category: category}
+  //   }
+
+    
+  //   const result = await surveysCollection.find(query).toArray();
+  //   res.send(result)
+  //  })
 
   app.get('/survey/:id', async(req, res) => {
       const id = req.params.id;
@@ -183,23 +239,24 @@ async function run() {
       const result = await surveysCollection.insertOne(product);
        res.send(result);
   })
+  //vul
   //survey page publish
-   app.patch('/survey-publish/:id',verifyToken, async(req, res) => {
-      const id = req.params.id;
-      const publish = req.body;
+  //  app.patch('/survey-publish/:id',verifyToken, async(req, res) => {
+  //     const id = req.params.id;
+  //     const publish = req.body;
       
-      console.log(id, publish);
-      const filter = { _id: new ObjectId(id) };
-      const updatedDoc = {
-        $set: {
-          isPublish: publish.publish
-        }
-      }
-      const result = await surveysCollection.updateOne(filter, updatedDoc)
-      console.log(result);
-      res.send(result)
-  })
-  //todo:survey page unpublished
+  //     console.log(id, publish);
+  //     const filter = { _id: new ObjectId(id) };
+  //     const updatedDoc = {
+  //       $set: {
+  //         isPublish: publish.publish
+  //       }
+  //     }
+  //     const result = await surveysCollection.updateOne(filter, updatedDoc)
+  //     console.log(result);
+  //     res.send(result)
+  // })
+  //todo: admin survey page unpublished
    app.patch('/survey-unpublished/:id',verifyToken, async(req, res) => {
       const id = req.params.id;
       const unpublished = req.body;
@@ -208,13 +265,123 @@ async function run() {
       const filter = { _id: new ObjectId(id) };
       const updatedDoc = {
         $set: {
-          feedback: unpublished.feedback
+          feedback: unpublished.feedback,
+          isPublish:false
         }
       }
       const result = await surveysCollection.updateOne(filter, updatedDoc)
       console.log(result);
       res.send(result)
   })
+  //Todo:surveyor survey update {id, body}
+  app.put('/surveyor/survey-update/:id', verifyToken, async(req, res) => {
+    const id = req.params.id;
+      const updateSurvey = req.body;
+      
+      console.log(id,updateSurvey);
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          title: updateSurvey.title,
+          category: updateSurvey.category,
+          description: updateSurvey.description
+        }
+      }
+      const result = await surveysCollection.updateOne(filter, updatedDoc)
+      console.log(result);
+      res.send(result)
+  })
+  
+  app.delete('/surveyor/survey-delete/:id',verifyToken, async(req,res) => {
+    const id = req.params.id;
+    console.log('survey deleted',id);
+    const query = { _id: new ObjectId(id) }
+    const result = await surveysCollection.deleteOne(query);
+    console.log(result);
+    res.send(result);
+  })
+
+  //user survey like and dislike
+  app.patch('/survey-like-dislike',verifyToken,async (req, res) => {
+    const id = req.query.id;
+    const status = req.query.status;
+    console.log(id, status);
+    
+    let updateDoc='';
+    const filter = { _id: new ObjectId(id) };
+    if(status === 'like'){
+      updatedDoc = {
+        $inc: {
+          like: 1
+        }
+      }
+    } else {
+      updatedDoc = {
+        $inc: {
+          dislike: 1
+        }
+      }
+    }
+     
+    const result = await surveysCollection.updateOne(filter, updatedDoc);
+    console.log(result);
+    res.send(result);
+  })
+  //user survey report 
+  app.patch('/survey-report/:id',verifyToken, async(req, res) => {
+    const id = req.params.id;
+    
+    
+    console.log(id);
+    const filter = { _id: new ObjectId(id) };
+    const updatedDoc = {
+      $set: {
+       
+        isReport:true
+      }
+    }
+    const result = await surveysCollection.updateOne(filter, updatedDoc)
+    console.log(result);
+    res.send(result)
+})
+//title comment get
+app.get('/comment',  async(req, res) => {
+     
+      const title = req.query?.title;
+      const query = {
+        title:title
+      }
+      
+      const result = await commentCollection.find(query).toArray();
+      res.send(result)
+} )
+//vote get 
+app.get('/survey-vote', async(req, res) => {
+  const result = await votedCollection.find().toArray();
+  res.send(result)
+})
+app.get('/survey-vote/:title', async(req, res) => {
+  const title = req.params.title;
+  const query = { title: title }
+  const result = await votedCollection.find(query).toArray();
+  res.send(result)
+})
+ // pro-user commit create in survey
+ app.post('/pro-user/create-comment',verifyToken, async(req, res) => {
+  const comment = req.body; console.log(comment);
+  const result = await commentCollection.insertOne(comment);
+   res.send(result);
+})
+
+//vote create  votedCollection
+app.post('/survey-vote', async(req, res) => {
+  const voted = req.body; console.log(voted);
+  const result = await votedCollection.insertOne(voted);
+   res.send(result);
+})
+
+
+
   //package related api 
      app.get('/packages', async(req, res) => {
       const result = await packagesCollection.find().toArray();
